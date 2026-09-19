@@ -2,6 +2,7 @@
 
 #include <math.h>
 
+#include "help_text.h"
 #include "scene.h"
 
 using namespace terra;
@@ -60,6 +61,8 @@ void drawJarPage(const World& w, const State& st, float t) {
     }
     cv.setTextDatum(bottom_right);
     hudText(kJarR - 4, kJarB - 12, st.speedLabel, rgb(255, 255, 255));
+    cv.setTextDatum(bottom_left);
+    hudText(kJarL + 4, kJarB - 12, "h help", rgb(230, 240, 230));
     cv.setTextDatum(top_left);
 }
 
@@ -140,6 +143,31 @@ void drawJournal(const World& w, const State& st) {
     }
 }
 
+void drawHelp(const State& st) {
+    cv.fillRect(0, 0, W, H, rgb(14, 16, 22));
+    cv.fillRect(0, 0, W, 14, rgb(24, 40, 60));
+    cv.setTextSize(1);
+    cv.setTextDatum(top_left);
+    cv.setTextColor(rgb(190, 225, 255));
+    char b[48];
+    snprintf(b, sizeof b, "HELP %d/%d  %s", st.helpPage + 1, help::kPages, help::kTitles[st.helpPage]);
+    cv.drawString(b, 4, 3);
+    cv.setTextDatum(top_right);
+    cv.setTextColor(rgb(130, 160, 190));
+    cv.drawString("h close", W - 4, 3);
+    cv.setTextDatum(top_left);
+    for (int i = 0; i < help::kMaxLines; i++) {
+        const char* l = help::kLines[st.helpPage][i];
+        if (!l || !l[0]) continue;
+        cv.setTextColor(l[0] == ' ' ? rgb(170, 190, 175) : rgb(225, 235, 225));
+        cv.drawString(l, 4, 18 + i * 9);
+    }
+    cv.setTextColor(rgb(110, 130, 150));
+    cv.setTextDatum(bottom_left);
+    cv.drawString(", / or ; .  = other help page", 4, H - 2);
+    cv.setTextDatum(top_left);
+}
+
 void drawSignals(const World& w, const State& st, const Signals& s) {
     cv.fillRect(0, 0, W, H, rgb(8, 12, 22));
     header("SIGNALS", w);
@@ -182,6 +210,7 @@ void draw(const World& w, const State& st, const Signals& sg) {
         case PAGE_SUMMARY: drawSummary(w); break;
         case PAGE_JOURNAL: drawJournal(w, st); break;
         case PAGE_SIGNALS: drawSignals(w, st, sg); break;
+        case PAGE_HELP: drawHelp(st); break;
         default: break;
     }
     if (st.toast[0] && millis() < st.toastUntil) {

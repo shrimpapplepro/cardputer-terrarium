@@ -4,6 +4,7 @@
 #include <M5Cardputer.h>
 #include <Preferences.h>
 
+#include "help_text.h"
 #include "signals.h"
 #include "terrarium.h"
 #include "view.h"
@@ -92,6 +93,18 @@ void toast(const char* s) {
 
 void handleKey(char c) {
     lastKeyMs = millis();
+    if (c == 'h') {  // help toggles from anywhere
+        if (vs.page == view::PAGE_HELP) vs.page = vs.helpReturn;
+        else { vs.helpReturn = vs.page; vs.page = view::PAGE_HELP; vs.helpPage = 0; }
+        return;
+    }
+    if (vs.page == view::PAGE_HELP) {  // in help: only paging and leaving; nothing acts on the tank
+        int n = help::kPages;
+        if (c == ',' || c == ';') vs.helpPage = (vs.helpPage + n - 1) % n;
+        else if (c == '/' || c == '.') vs.helpPage = (vs.helpPage + 1) % n;
+        else if (c >= '1' && c <= '4') vs.page = (view::Page)(c - '1');
+        return;
+    }
     switch (c) {
         case '1': vs.page = view::PAGE_JAR; break;
         case '2': vs.page = view::PAGE_SUMMARY; break;
@@ -211,7 +224,7 @@ void handleSerialLine(String l) {
     switch (c) {
         case 'h':
             Serial.println("s status | j journal | P screenshot | k<keys> inject keys | w scan now | f speed | v save\n"
-                           "x<days> fast-forward | z<seed> new jar | T<HHMM> set clock | o open/wake screen | G<n> show page n");
+                           "x<days> fast-forward | z<seed> new jar | T<HHMM> set clock | o open/wake screen | G<n> show page n\n(keys: kh opens the on-device help)");
             break;
         case 's': printStatus(); break;
         case 'j': printJournal(); break;
@@ -266,6 +279,7 @@ void setup() {
     lastStepMs = millis();
     lastKeyMs = millis();
     vs.speedLabel = kSpeedLabels[0];
+    toast("Press H for help");
     Serial.printf("[boot] terrarium up, heap free=%lu big=%lu frac=%.3f\n", (unsigned long)ESP.getFreeHeap(),
                   (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT), clockFrac());
 }

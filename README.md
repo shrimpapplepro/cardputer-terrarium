@@ -44,6 +44,7 @@ Every key is a single press.
 | `f` | Sim speed: 1x → 60x → 600x → 3600x |
 | `[` `]` | Trim the clock −/+ 1 hour (there is no RTC) |
 | `0` `0` | New tank (press twice within 3 s) |
+| `h` | Open / close the on-device help (`,` `/` flip its 3 pages) |
 
 - **Summary** — overall health, then a bar, trend arrow and 30-day sparkline per species.
 - **Journal** — the last 32 events: blooms, crashes and recoveries, first gnats, cold/warm/dry
@@ -52,6 +53,33 @@ Every key is a single press.
 
 The screen dims after 30 s idle and turns off after 3 min; the tank keeps living. The first key
 press after it turns off only wakes it.
+
+## How to play
+
+The on-device help (`h`) has the same text, in small type:
+
+| Keys | How to play | Sensors + journal |
+|---|---|---|
+| ![Help: keys](docs/help-keys.png) | ![Help: how to play](docs/help-play.png) | ![Help: sensors and journal](docs/help-sensors.png) |
+
+A sealed tank mostly looks after itself; you only nudge it.
+
+- **Watch.** *Tank* shows the plants, bugs, and day/night. *Summary* shows who is thriving: a bar,
+  a trend arrow and a 30-day line per species, plus an overall health %. *Journal* records what
+  happened and when.
+- **Mist** (`m`) when the Journal says a dry spell hit or the plants look droopy. Don't flood it —
+  wet soil is slow to dry.
+- **Seed** (`s`) when plants look sparse. **Prune** (`p`) when crowded; the cuttings become
+  detritus that feeds the isopods and springtails.
+- **Grow light** (`l`) brightens the tank for a few hours, even at night. The built-in light
+  already follows the day/night cycle, so you rarely need it.
+- **Pests** (aphids, fungus gnats) rise and fall on their own — the ladybug and spider catch up.
+  There is nothing to "win": no species can be wiped out.
+- **Shake it, talk to it, walk around.** The IMU, microphone and the WiFi/Bluetooth traffic around
+  you add tiny random nudges. Journal words: *Tremor* = you shook it, *Radio storm* = the
+  WiFi/BLE air got busy, *cold / warm / dry spell* = rare weather, *boomed / crashed / recovering*
+  = a population swung.
+- **`f`** speeds time up (60x, 600x, 3600x) so you can watch days pass.
 
 ## How the sensors matter
 
@@ -108,6 +136,23 @@ make test      # ~2 s, prints per-species min/mean/max and PASS/FAIL
 - The keyboard's `isChange()` is a destructive latch, so it is polled on every loop, releases
   included.
 
+## Prebuilt firmware
+
+Each [release](../../releases) carries two images, both built from this source:
+
+| File | Flash at | Use |
+|---|---|---|
+| `terrarium-adv-vX.Y.Z-factory.bin` | `0x0` | bootloader + partition table + app, one step; **replaces the whole layout** (including an M5Launcher install) |
+| `terrarium-adv-vX.Y.Z-app.bin` | `0x10000` | app only, when this project's partition table is already on the board (keeps saved tank) |
+
+```sh
+# native USB: no download-mode button needed. --no-stub matters on this board.
+esptool.py --chip esp32s3 --no-stub -p /dev/cu.usbmodemXXXX --before default_reset --after hard_reset \
+  write_flash 0x0 terrarium-adv-v1.0.0-factory.bin
+```
+
+Check the download against `SHA256SUMS` first. The images contain no credentials or keys.
+
 ## Build and flash
 
 Requires [PlatformIO](https://platformio.org/).
@@ -149,7 +194,7 @@ mode) — `tools/ser.py` does this. It needs pyserial, which PlatformIO's Python
 | `x<days>` | fast-forward the sim (debug; not logged as an absence) |
 | `z<seed>` | new tank with a seed |
 | `T<HHMM>` | set the clock |
-| `G<n>` | show page *n* |
+| `G<n>` | show page *n* (`kh` opens the help) |
 
 The screenshots in this README were taken this way.
 
@@ -160,7 +205,8 @@ sim/terrarium.{h,cpp}   portable simulation core (host-tested)
 src/main.cpp            loop, keys, serial channel, save/restore, sim clock
 src/signals.{h,cpp}     sensors, WiFi/BLE bursts, entropy
 src/scene.cpp           the tank drawing
-src/view.{h,cpp}        Summary / Journal / Signals pages, HUD
+src/view.{h,cpp}        Summary / Journal / Signals / Help pages, HUD
+src/help_text.h         every key and the how-to-play text (single source for the on-device help)
 tools/harness.cpp       stability gate
 tools/ser.py            serial helper + screenshots
 tools/flash.sh          app-only flash

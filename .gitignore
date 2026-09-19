@@ -1,3 +1,4 @@
 harness
 .pio/
 .DS_Store
+dist/
