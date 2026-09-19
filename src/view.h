@@ -7,11 +7,14 @@
 #include "terrarium.h"
 
 namespace view {
-enum Page : uint8_t { PAGE_JAR, PAGE_SUMMARY, PAGE_JOURNAL, PAGE_SIGNALS, kPages };
+// PAGE_HELP is outside the ,/ page cycle: it is opened with H.
+enum Page : uint8_t { PAGE_JAR, PAGE_SUMMARY, PAGE_JOURNAL, PAGE_SIGNALS, kPages, PAGE_HELP = kPages };
 
 struct State {
     Page page = PAGE_JAR;
     int journalScroll = 0;
+    int helpPage = 0;
+    Page helpReturn = PAGE_JAR;  // where H closes back to
     uint8_t speed = 0;  // index into main's speed table, for the HUD
     const char* speedLabel = "1x";
     float dayFrac = 0;
