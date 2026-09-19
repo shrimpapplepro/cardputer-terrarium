@@ -4,6 +4,7 @@
 
 #include "help_text.h"
 #include "scene.h"
+#include "version.h"
 
 using namespace terra;
 
@@ -190,6 +191,8 @@ void drawSignals(const World& w, const State& st, const Signals& s) {
     line("jar T%.1f H%.2f S%.2f N%.2f A%.2f", w.temp, w.hum, w.soil, w.nut, w.air);
     int hh = (int)(st.dayFrac * 24), mm = (int)(fmodf(st.dayFrac * 1440.0f, 60.0f));
     line("clock %02d:%02d  speed %s  up %lus", hh, mm, st.speedLabel, (unsigned long)(millis() / 1000));
+    cv.setTextColor(rgb(120, 220, 160));
+    line("terrarium v%s %s", TERRARIUM_VERSION, TERRARIUM_GIT_SHA);
 }
 
 }  // namespace

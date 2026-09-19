@@ -49,7 +49,9 @@ Every key is a single press.
 - **Summary** — overall health, then a bar, trend arrow and 30-day sparkline per species.
 - **Journal** — the last 32 events: blooms, crashes and recoveries, first gnats, cold/warm/dry
   spells, tremors, "radio storms", and what you did.
-- **Signals** — every live sensor number, the entropy hash, and free heap around each scan.
+- **Signals** — every live sensor number, the entropy hash, free heap around each scan, and the
+  firmware version + git commit on the last line (`terrarium v1.0.1 468d397`; `-dirty` if built from
+  uncommitted changes), so you can tell which build is running.
 
 The screen dims after 30 s idle and turns off after 3 min; the tank keeps living. The first key
 press after it turns off only wakes it.

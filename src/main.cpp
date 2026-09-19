@@ -7,6 +7,7 @@
 #include "help_text.h"
 #include "signals.h"
 #include "terrarium.h"
+#include "version.h"
 #include "view.h"
 
 using namespace terra;
@@ -174,6 +175,7 @@ void stepSim() {
 
 void printStatus() {
     const Signals& s = sig::s;
+    Serial.printf("terrarium v%s %s\n", TERRARIUM_VERSION, TERRARIUM_GIT_SHA);
     Serial.printf("age=%.3f health=%.2f speed=%s page=%d frac=%.3f\n", world.age, health(world), kSpeedLabels[speedIdx], vs.page, simFrac);
     Serial.printf("jar T=%.2f H=%.3f soil=%.3f nut=%.3f air=%.3f det=%.3f lamp=%.2f ev=%.2f/%.2f/%.2f\n", world.temp, world.hum,
                   world.soil, world.nut, world.air, world.det, world.lamp, world.evTemp, world.evHum, world.evLeft);
@@ -280,7 +282,7 @@ void setup() {
     lastKeyMs = millis();
     vs.speedLabel = kSpeedLabels[0];
     toast("Press H for help");
-    Serial.printf("[boot] terrarium up, heap free=%lu big=%lu frac=%.3f\n", (unsigned long)ESP.getFreeHeap(),
+    Serial.printf("[boot] terrarium v%s %s up, heap free=%lu big=%lu frac=%.3f\n", TERRARIUM_VERSION, TERRARIUM_GIT_SHA, (unsigned long)ESP.getFreeHeap(),
                   (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT), clockFrac());
 }
 
