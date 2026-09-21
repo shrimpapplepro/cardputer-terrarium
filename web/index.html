@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terrarium for the Cardputer ADV: web installer</title>
+<style>
+  :root { color-scheme: light dark; --bg:#0d1117; --fg:#e6edf3; --dim:#8b949e; --card:#161b22; --line:#30363d; --accent:#3fb950; }
+  @media (prefers-color-scheme: light) { :root { --bg:#fff; --fg:#1f2328; --dim:#59636e; --card:#f6f8fa; --line:#d1d9e0; --accent:#1a7f37; } }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 system-ui, sans-serif; }
+  main { max-width:40rem; margin:0 auto; padding:2rem 16px 4rem; }
+  h1 { font-size:1.6rem; margin:0 0 .25rem; }
+  .sub { color:var(--dim); margin:0 0 1.5rem; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:1rem 1.25rem; margin:1rem 0; }
+  .card h2 { font-size:1rem; margin:0 0 .5rem; }
+  ol, ul { padding-left:1.25rem; margin:.25rem 0; }
+  esp-web-install-button { --esp-tools-button-color: var(--accent); }
+  #unsupported { display:none; }
+  .warn { border-color:#d29922; }
+  code { background:var(--card); border:1px solid var(--line); border-radius:4px; padding:0 .3em; font-size:.9em; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Terrarium for the Cardputer ADV</h1>
+  <p class="sub">Install from your browser: no toolchain, no drivers, no download-mode button.</p>
+
+  <div class="card">
+    <h2>Install</h2>
+    <ol>
+      <li>Plug the Cardputer ADV into this computer with a USB-C <em>data</em> cable and switch it on.</li>
+      <li>Click the button and pick the serial device that appears (an "USB JTAG/serial debug unit" or "Espressif").</li>
+      <li>Wait about a minute. The board restarts into the tank by itself.</li>
+    </ol>
+    <p>
+      <esp-web-install-button manifest="manifest.json">
+        <span slot="unsupported" id="unsupported" style="display:inline">
+          This browser can't talk to serial devices. Use desktop Chrome, Edge or Opera.
+        </span>
+      </esp-web-install-button>
+    </p>
+  </div>
+
+  <div class="card warn">
+    <h2>Read this first</h2>
+    <p>This writes the whole flash (bootloader, partition table, app). <strong>It replaces an M5Launcher
+    install and every app stored in its slots.</strong> If you use the Launcher, install through it instead:
+    copy <code>terrarium-adv-…-app.bin</code> from the
+    <a href="https://github.com/shrimpapplepro/cardputer-terrarium/releases/latest">latest release</a>
+    to the SD card.</p>
+    <p>Nothing here needs Wi-Fi credentials, an account or internet access on the device. The tank only
+    <em>listens</em> to nearby Wi-Fi/Bluetooth signals as a source of randomness; nothing is stored or sent.</p>
+  </div>
+
+  <div class="card">
+    <h2>Trouble?</h2>
+    <ul>
+      <li>No device in the list: try another cable or port; some cables are charge-only.</li>
+      <li>Linux: add yourself to the <code>dialout</code> group (or <code>uucp</code>) and log in again.</li>
+      <li>Windows: if the port never shows up, install the
+      <a href="https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/api-guides/usb-serial-jtag-console.html">USB-Serial/JTAG driver</a>.</li>
+      <li>Command line or building from source: see the
+      <a href="https://github.com/shrimpapplepro/cardputer-terrarium#readme">README</a>.</li>
+    </ul>
+  </div>
+</main>
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+</body>
+</html>
