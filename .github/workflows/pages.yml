@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to publish (default: latest)
+        description: "Release tag to publish (blank = latest)"
         required: false
 
 permissions:
