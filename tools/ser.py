@@ -4,10 +4,21 @@
   ser.py -w 8           just listen for 8 s
   ser.py --shot out.png screenshot the panel (sends P, decodes RGB332)
 Must run under PlatformIO's python (has pyserial): ~/.platformio/penv/bin/python
+Set TERRARIUM_PORT to override the auto-detected port.
 """
-import sys, time, zlib, struct, serial
+import glob, os, sys, time, zlib, struct, serial
 
-PORT = "/dev/cu.usbmodem101"
+def find_port():
+    """TERRARIUM_PORT wins; otherwise the first USB-Serial/JTAG-looking device."""
+    if os.environ.get("TERRARIUM_PORT"):
+        return os.environ["TERRARIUM_PORT"]
+    for pat in ("/dev/cu.usbmodem*", "/dev/ttyACM*"):
+        hits = sorted(glob.glob(pat))
+        if hits:
+            return hits[0]
+    sys.exit("no serial port found; plug the Cardputer in or set TERRARIUM_PORT")
+
+PORT = find_port()
 
 def open_port():
     s = serial.Serial()

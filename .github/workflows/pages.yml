@@ -1,0 +1,52 @@
+# Publishes the browser installer (ESP Web Tools) to GitHub Pages every time a
+# release is published. The firmware is copied from the release's factory image,
+# so the installer always flashes exactly what the release ships.
+# One-time setup: Settings > Pages > Source: "GitHub Actions".
+name: web-installer
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish (default: latest)
+        required: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble site
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          set -e
+          if [ -z "$TAG" ]; then TAG=$(gh release view --json tagName --jq .tagName); fi
+          mkdir site
+          gh release download "$TAG" --pattern '*-factory.bin' --output site/firmware.bin
+          cp web/index.html site/
+          printf '{"name":"Terrarium for the Cardputer ADV","version":"%s","new_install_prompt_erase":false,"builds":[{"chipFamily":"ESP32-S3","parts":[{"path":"firmware.bin","offset":0}]}]}\n' \
+            "${TAG#v}" > site/manifest.json
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -13,6 +13,30 @@ real time on the device, and the board's own sensors nudge it — gently.
 |---|---|---|
 | ![Summary page](docs/summary.png) | ![Journal page](docs/journal.png) | ![Signals page](docs/signals.png) |
 
+## Install (no tools needed)
+
+Download from the [latest release](../../releases/latest). Pick one route:
+
+| Route | File | Keeps your other apps? |
+|---|---|---|
+| **M5Burner** | `terrarium-adv-vX.Y.Z-factory.bin` | No, rewrites the whole flash |
+| **M5Launcher** (SD card) | `terrarium-adv-vX.Y.Z-app.bin` | Yes |
+| **Browser** ([web installer](https://shrimpapplepro.github.io/cardputer-terrarium/)) | none, it fetches `factory.bin` | No, rewrites the whole flash |
+
+**M5Burner:** open M5Burner, choose the Cardputer's serial port, pick the downloaded
+`…-factory.bin` as a custom/local firmware and burn it **at address `0x0`** (it is a complete,
+merged image: bootloader + partition table + app). Then restart the board.
+
+**M5Launcher:** copy `…-app.bin` to the SD card, put the card in the Cardputer, open the
+Launcher's SD browser and install it. The app is ~1.1 MB and fits the Launcher's app slot.
+
+**Browser:** desktop Chrome, Edge or Opera, USB-C data cable, click *Install*. About a minute.
+
+> `factory.bin` (M5Burner and the web installer) **replaces an M5Launcher layout and its
+> installed apps**. Use the SD-card route if you want to keep them.
+
+Command line and building from source are further down.
+
 ## What you see
 
 A fish-tank-sized terrarium viewed through the front glass: a grow-light bar on top, drainage
@@ -149,15 +173,17 @@ Each [release](../../releases) carries two images, both built from this source:
 
 ```sh
 # native USB: no download-mode button needed. --no-stub matters on this board.
-esptool.py --chip esp32s3 --no-stub -p /dev/cu.usbmodemXXXX --before default_reset --after hard_reset \
+esptool.py --chip esp32s3 --no-stub -p <your serial port> --before default_reset --after hard_reset \
   write_flash 0x0 terrarium-adv-v1.0.0-factory.bin
 ```
 
 Check the download against `SHA256SUMS` first. The images contain no credentials or keys.
+The web installer flashes the same `factory.bin` from the latest release.
 
 ## Build and flash
 
-Requires [PlatformIO](https://platformio.org/).
+Requires [PlatformIO](https://platformio.org/). The serial port is auto-detected; set
+`TERRARIUM_PORT=/dev/ttyACM0` (or your port) for `tools/flash.sh` and `tools/ser.py` to override it.
 
 ```sh
 pio run                 # build
@@ -215,10 +241,22 @@ tools/flash.sh          app-only flash
 lib/M5Cardputer/        vendored M5Cardputer keyboard library (MIT, M5Stack)
 ```
 
+## Privacy
+
+The firmware never connects to any network and has no credentials, accounts or telemetry. Wi-Fi
+and Bluetooth are used only for short *passive scans*; each nearby device's address and signal
+strength is folded into a hash and a few counts in RAM. Addresses and names are not saved to
+flash, printed, or sent anywhere. Only the tank state (populations, journal, clock trim) is saved.
+
 ## Persistence
 
 The tank is saved to NVS every 10 minutes and on request (`v`). A version number guards the
 format; on mismatch a new tank is started.
+
+## License
+
+MIT, see [LICENSE](LICENSE). The vendored `lib/M5Cardputer/` keeps its own MIT / SPDX headers
+(M5Stack; the bundled `Adafruit_TCA8418` driver is Adafruit's, BSD).
 
 ## Credits
 
