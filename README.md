@@ -32,6 +32,9 @@ Launcher's SD browser and install it. The app is ~1.1 MB and fits the Launcher's
 
 **Browser:** desktop Chrome, Edge or Opera, USB-C data cable, click *Install*. About a minute.
 
+For USB routes, connect the cable **before** switching the board on: a board that is already
+running does not show up when the cable is plugged in.
+
 > `factory.bin` (M5Burner and the web installer) **replaces an M5Launcher layout and its
 > installed apps**. Use the SD-card route if you want to keep them.
 
@@ -169,12 +172,14 @@ make test      # ~2 s, prints per-species min/mean/max and PASS/FAIL
   with `WiFi.scanDelete()` or each scan leaks ~650 bytes.
 - The keyboard's `isChange()` is a destructive latch, so it is polled on every loop, releases
   included.
-- **USB hot-plug.** Arduino 2.0.x `HWCDC::begin()` forces a re-enumeration by driving D-/D+
-  (GPIO19/20) low as GPIO outputs and never releases them, so a cable plugged into an already
-  running board never enumerated (the host saw power only). The firmware hands both pins back to
-  the USB PHY after `Serial.begin()`. Serial `u` prints the pin state plus a per-boot record of
-  USB events (bus resets, connects, start-of-frame seen/lost) kept in NVS for the last three
-  boots, so a failed plug can be read back after the next boot.
+- **USB hot-plug does not work yet.** A cable plugged into an already running board is seen by
+  the host as power only, with no USB device. Plug the cable in first, then switch the board on
+  (or switch it off and on with the cable attached), and the serial port appears. The firmware
+  hands D-/D+ (GPIO19/20) back to the USB PHY after `Serial.begin()` (Arduino 2.0.x `HWCDC`
+  leaves them as GPIO outputs), but that alone did not fix it: on a failed plug the board sees
+  no bus reset and no start-of-frame at all. Serial `u` prints the pin state plus a per-boot
+  record of USB events (bus resets, connects, start-of-frame seen/lost) kept in NVS for the last
+  three boots, so a failed plug can be read back after the next boot.
 
 ## Prebuilt firmware
 
