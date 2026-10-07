@@ -49,8 +49,8 @@ void hudText(int x, int y, const char* s, uint16_t c) {
     cv.drawString(s, x, y);
 }
 
-void drawJarPage(const World& w, const State& st, float t) {
-    scene::draw(cv, w, st.dayFrac, t, clamp01(w.fSound + w.fShake));
+void drawJarPage(const World& w, const State& st, const Signals& sg, float t) {
+    scene::draw(cv, w, st.dayFrac, t, clamp01(w.fSound + w.fShake), clamp01(sg.jerk / 1.2f));
     cv.setTextSize(1);
     cv.setTextDatum(top_left);
     char b[48];
@@ -209,7 +209,7 @@ bool begin(M5GFX* display) {
 void draw(const World& w, const State& st, const Signals& sg) {
     float t = millis() / 1000.0f;
     switch (st.page) {
-        case PAGE_JAR: drawJarPage(w, st, t); break;
+        case PAGE_JAR: drawJarPage(w, st, sg, t); break;
         case PAGE_SUMMARY: drawSummary(w); break;
         case PAGE_JOURNAL: drawJournal(w, st); break;
         case PAGE_SIGNALS: drawSignals(w, st, sg); break;
