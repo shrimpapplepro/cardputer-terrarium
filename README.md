@@ -49,7 +49,15 @@ cushion and carpet moss, button/lemon-button ferns, fittonia (pink and red veins
 peperomia, baby tears, selaginella, and creeping fig climbing the glass.
 
 **Creatures:** springtails, isopods (grey, orange, dalmatian), fungus gnats and their larvae,
-aphids, a ladybug, a jumping spider, plus mold and small mushrooms.
+aphids, a ladybug, a jumping spider, plus mold and small mushrooms. Each bug on screen is a
+small persistent agent with its own habits: isopods wander the litter, pause, and roll into a
+ball when you knock the board; springtails hop in short arcs; gnats flit about and land on
+leaves; ladybugs climb stems and fly between plants; the jumping spider stalks, crouches and
+pounces on a landed gnat or springtail. How many of each you see follows the simulation; the
+agents only animate it and never feed back. Below the soil line each plant grows its own
+branching roots.
+
+The tank redraws at 20 fps while the screen is bright and 10 fps once it dims.
 
 ## Pages and keys
 
@@ -74,7 +82,7 @@ Every key is a single press.
 - **Journal** — the last 32 events: blooms, crashes and recoveries, first gnats, cold/warm/dry
   spells, tremors, "radio storms", and what you did.
 - **Signals** — every live sensor number, the entropy hash, free heap around each scan, and the
-  firmware version + git commit on the last line (`terrarium v1.0.1 468d397`; `-dirty` if built from
+  firmware version + git commit on the last line (`terrarium v1.0.3 613fe02`; `-dirty` if built from
   uncommitted changes), so you can tell which build is running.
 
 The screen dims after 30 s idle and turns off after 3 min; the tank keeps living. The first key
@@ -161,6 +169,12 @@ make test      # ~2 s, prints per-species min/mean/max and PASS/FAIL
   with `WiFi.scanDelete()` or each scan leaks ~650 bytes.
 - The keyboard's `isChange()` is a destructive latch, so it is polled on every loop, releases
   included.
+- **USB hot-plug.** Arduino 2.0.x `HWCDC::begin()` forces a re-enumeration by driving D-/D+
+  (GPIO19/20) low as GPIO outputs and never releases them, so a cable plugged into an already
+  running board never enumerated (the host saw power only). The firmware hands both pins back to
+  the USB PHY after `Serial.begin()`. Serial `u` prints the pin state plus a per-boot record of
+  USB events (bus resets, connects, start-of-frame seen/lost) kept in NVS for the last three
+  boots, so a failed plug can be read back after the next boot.
 
 ## Prebuilt firmware
 
@@ -174,7 +188,7 @@ Each [release](../../releases) carries two images, both built from this source:
 ```sh
 # native USB: no download-mode button needed. --no-stub matters on this board.
 esptool.py --chip esp32s3 --no-stub -p <your serial port> --before default_reset --after hard_reset \
-  write_flash 0x0 terrarium-adv-v1.0.0-factory.bin
+  write_flash 0x0 terrarium-adv-vX.Y.Z-factory.bin
 ```
 
 Check the download against `SHA256SUMS` first. The images contain no credentials or keys.
@@ -204,7 +218,7 @@ Open the port with DTR asserted and RTS low (other combinations can drop the chi
 mode) — `tools/ser.py` does this. It needs pyserial, which PlatformIO's Python already has:
 
 ```sh
-~/.platformio/penv/bin/python tools/ser.py s        # status: jar, populations, sensors, heap
+~/.platformio/penv/bin/python tools/ser.py s        # status: jar, populations, sensors, heap, frame time
 ~/.platformio/penv/bin/python tools/ser.py k2       # inject keys (as if typed)
 ~/.platformio/penv/bin/python tools/ser.py --shot a.png   # screenshot the panel, 4x PNG
 ```
@@ -212,7 +226,7 @@ mode) — `tools/ser.py` does this. It needs pyserial, which PlatformIO's Python
 | Command | Effect |
 |---|---|
 | `h` | help |
-| `s` | full status |
+| `s` | full status (incl. draw+push time per frame and its max) |
 | `j` | dump the journal |
 | `P` | dump the framebuffer (used by `--shot`) |
 | `k<keys>` | inject key presses |
@@ -222,9 +236,20 @@ mode) — `tools/ser.py` does this. It needs pyserial, which PlatformIO's Python
 | `x<days>` | fast-forward the sim (debug; not logged as an absence) |
 | `z<seed>` | new tank with a seed |
 | `T<HHMM>` | set the clock |
+| `o` | wake the screen |
+| `u` | USB pin state and the last three boots' USB event records |
 | `G<n>` | show page *n* (`kh` opens the help) |
 
 The screenshots in this README were taken this way.
+
+## Preview without the board
+
+`tools/preview/` builds the real `src/scene.cpp` on the host against a tiny fake `M5Canvas`,
+so the animation can be judged without flashing:
+
+```sh
+tools/preview/render.sh out.gif [days] [secs] [hour] [seed] [shakeAt]   # also .mp4 or .png
+```
 
 ## Layout
 
@@ -238,6 +263,7 @@ src/help_text.h         every key and the how-to-play text (single source for th
 tools/harness.cpp       stability gate
 tools/ser.py            serial helper + screenshots
 tools/flash.sh          app-only flash
+tools/preview/          host renderer for the tank scene (gif / mp4 / png)
 lib/M5Cardputer/        vendored M5Cardputer keyboard library (MIT, M5Stack)
 ```
 
