@@ -185,16 +185,96 @@ void heart(int x, int y, uint16_t c) {
     C->drawPixel(x - 1, y, c); C->drawPixel(x + 1, y, c); C->drawFastHLine(x - 1, y + 1, 3, c); C->drawPixel(x, y + 2, c);
 }
 
+// ---- roots ---------------------------------------------------------------------
+// Seen through the glass, each plant type has its own root form, and every
+// plant's branching comes from its own seed, so no two root systems match.
+
+// One root: five jittered segments that bend down (gravitropism) and may fork.
+void rootLine(float x, float y, float ang, float len, int depth, uint16_t c, uint32_t seed) {
+    float seg = len / 5.0f;
+    for (int i = 0; i < 5; i++) {
+        ang = ang * 0.85f + (frand(seed + i * 17) - 0.5f) * 0.7f;
+        float nx = x + sinf(ang) * seg, ny = y + cosf(ang) * seg;
+        if (ny > kSoilBot - 1) ny = kSoilBot - 1;
+        C->drawLine((int)x, (int)y, (int)nx, (int)ny, c);
+        if (depth > 0 && i < 4 && frand(seed * 7 + i) < 0.45f) {
+            float side = frand(seed * 13 + i) < 0.5f ? -1.0f : 1.0f;
+            rootLine(nx, ny, ang + side * (0.6f + 0.5f * frand(seed + i * 5)), len * (0.35f + 0.2f * frand(seed * 3 + i)), depth - 1, c,
+                     hash32(seed + i * 101));
+        }
+        x = nx; y = ny;
+    }
+}
+
+void roots(int col, int k, int x0, int y0, float p) {
+    uint32_t sd = hash32(col * 131 + 7);
+    float g = fminf(1.0f, 0.3f + p * 1.2f);  // root mass follows the plant
+    switch (k) {
+        case K_MAT:
+        case K_MOUND: {  // moss has no true roots: a fringe of short brown rhizoids
+            int wd = k == K_MAT ? 6 + (int)(p * 14) : 4 + (int)(p * 9);
+            for (int x = x0 - wd + 1; x < x0 + wd; x += 1 + (int)(frand(sd + x) * 2.0f))
+                C->drawFastVLine(x, y0 + 1, 1 + (int)(frand(sd * 3 + x) * 3.0f * g), rgb(104, 76, 48));
+            break;
+        }
+        case K_BABY: {  // a dense, shallow mat of fine white roots
+            int r = 4 + (int)(p * 8);
+            for (int i = 0; i < 2 + r / 3; i++) {
+                float fx = x0 - r + frand(sd + i) * 2 * r;
+                rootLine(fx, y0 + 1, (frand(sd * 5 + i) - 0.5f) * 1.6f, (3.0f + frand(sd * 9 + i) * 4.0f) * g, 0, rgb(222, 212, 190), sd + i * 31);
+            }
+            break;
+        }
+        case K_FERN: {  // a creeping rhizome just under the surface, hung with wiry dark roots
+            int rw = 3 + (int)(6 * g);
+            uint16_t rh = rgb(140, 96, 58);
+            C->drawFastHLine(x0 - rw, y0 + 2, 2 * rw + 1, rh);
+            C->drawFastHLine(x0 - rw + 1, y0 + 3, 2 * rw - 1, rgb(104, 70, 42));
+            for (int i = 0; i < 3 + (int)(p * 4); i++) {
+                float fx = x0 - rw + frand(sd + i * 3) * 2 * rw;
+                rootLine(fx, y0 + 3, (frand(sd * 7 + i) - 0.5f) * 0.9f, (5.0f + frand(sd * 11 + i) * 8.0f) * g, 1, rgb(40, 28, 22), sd + i * 53);
+            }
+            break;
+        }
+        case K_FITT:  // fibrous and spreading, pale
+            for (int i = 0; i < 5; i++)
+                rootLine(x0, y0 + 1, -1.2f + 2.4f * i / 4.0f + (frand(sd + i) - 0.5f) * 0.4f, (5.0f + frand(sd * 3 + i) * 7.0f) * g, 1,
+                         rgb(208, 186, 150), sd + i * 71);
+            break;
+        case K_PILEA:  // a compact white root ball
+            for (int i = 0; i < 5; i++)
+                rootLine(x0, y0 + 1, -0.9f + 1.8f * i / 4.0f, (3.0f + frand(sd * 3 + i) * 5.0f) * g, 1, rgb(230, 220, 198), sd + i * 37);
+            break;
+        case K_PEPER:  // a few fine, shallow, reddish roots that run sideways
+            for (int i = 0; i < 4; i++) {
+                float side = (i & 1) ? 1.0f : -1.0f;
+                rootLine(x0, y0 + 1, side * (0.9f + 0.4f * frand(sd + i)), (6.0f + frand(sd * 5 + i) * 7.0f) * g, 1, rgb(196, 140, 124), sd + i * 43);
+            }
+            break;
+        case K_SELAG: {  // rhizophores: pale props that drop from the stems into the soil
+            uint16_t rc = rgb(196, 214, 182);
+            for (int i = 0; i < 3; i++) {
+                int dx = (i - 1) * (3 + (int)(p * 4)) + (int)(frand(sd + i) * 3.0f) - 1;
+                C->drawLine(x0 + dx / 2, y0 - 3, x0 + dx, y0, rc);
+                rootLine(x0 + dx, y0 + 1, dx * 0.08f, (4.0f + frand(sd * 3 + i) * 5.0f) * g, 1, rc, sd + i * 59);
+            }
+            break;
+        }
+        case K_FIG: {  // a woody, branching main root that goes deep
+            uint16_t rc = rgb(156, 112, 70);
+            rootLine(x0, y0 + 1, (frand(sd) - 0.5f) * 0.5f, 18.0f * g, 3, rc, sd);
+            rootLine(x0 + 1, y0 + 1, (frand(sd) - 0.5f) * 0.5f, 10.0f * g, 1, rc, sd);  // doubled near the crown: thicker
+            break;
+        }
+    }
+}
+
 void plant(int col, const World& w, float t, float wind) {
     int k = kKind[col];
     float p = w.p[col];
     int eff = plantHeight(w, col);
     int x0 = stemX(col), y0 = surfaceY(x0) < kSoilTop - 2 ? kSoilTop : kSoilTop;
-    // roots into the soil
-    int rl = (int)fminf(12.0f, p * 18.0f) + 1;
-    uint16_t root = rgb(170, 138, 104);
-    C->drawLine(x0, y0, x0, y0 + rl, root);
-    if (rl > 6) { C->drawLine(x0, y0 + 4, x0 - 4, y0 + 4 + rl / 3, root); C->drawLine(x0, y0 + 6, x0 + 4, y0 + 6 + rl / 3, root); }
+    roots(col, k, x0, y0, p);
 
     float sway = sinf(t * 0.7f + col * 0.9f) * (0.2f + wind * 3.0f) * (0.4f + eff / 40.0f);
     uint16_t dg = rgb(44, 112, 58), mg = rgb(70, 150, 72), lg = rgb(120, 196, 96);
@@ -304,26 +384,473 @@ void plant(int col, const World& w, float t, float wind) {
 }
 
 // ---- creatures -----------------------------------------------------------------
+// Each visible creature is a small persistent agent with a behaviour state,
+// stepped by real frame time: isopods wander and pause, springtails spring,
+// gnats flit and land, ladybugs climb stems and fly between plants, and the
+// jumping spider stalks and pounces. The sim decides HOW MANY are shown; the
+// agents only decide what those few are doing right now. Nothing here feeds
+// back into the sim (a "caught" gnat just re-enters elsewhere).
 
-void springtail(int x, int y, float hop) {
-    C->drawPixel(x, y + 1, rgb(90, 70, 50));
-    C->drawPixel(x, y - (int)hop, rgb(240, 244, 250));
-    if (hop > 0.5f) C->drawPixel(x - 1, y - (int)hop + 1, rgb(200, 205, 215));
+uint32_t gR = 0x9E3779B9u;
+float gLastT = -1, gJoltHold = 0, gDt = 0;  // frame clock, startle refractory
+float rnd() { gR ^= gR << 13; gR ^= gR >> 17; gR ^= gR << 5; return (gR & 0xFFFFFF) / 16777216.0f; }
+float rr(float a, float b) { return a + (b - a) * rnd(); }
+inline int ir(float v) { return (int)lroundf(v); }
+inline float approach(float v, float target, float rate, float dt) { return v + (target - v) * fminf(1.0f, rate * dt); }
+
+constexpr int kXL = kJarL + 6, kXR = kJarR - 6;  // walkable span
+constexpr float kG = 150.0f;                     // px/s^2, for hops and jumps
+
+struct Bug {
+    float x, y, vx, vy, timer, phase;
+    uint8_t st;
+    int8_t dir;  // facing: -1 left / up, +1 right / down
+    int8_t col;  // ladybug: plant column; spider: prey (-1 none, 0.. gnat, 16.. springtail)
+    bool on;
+};
+
+enum { ISO_WALK, ISO_PAUSE, ISO_ROLL };
+enum { ST_SIT, ST_HOP, ST_GLASS };
+enum { GN_FLY, GN_LAND };
+enum { LB_CLIMB, LB_PAUSE, LB_FLY, LB_GROUND };
+enum { JS_SIT, JS_STALK, JS_CROUCH, JS_JUMP, JS_EAT };
+
+constexpr int kMaxIso = 6, kMaxSpring = 14, kMaxGnat = 6, kMaxLady = 3, kMaxSpider = 2;
+Bug iso[kMaxIso], spr[kMaxSpring], gnat[kMaxGnat], lady[kMaxLady], spi[kMaxSpider];
+
+float clampX(float x) { return x < kXL ? kXL : (x > kXR ? kXR : x); }
+float ground(float x) { return (float)surfaceY((int)clampX(x)); }
+
+// Agents [0, n) are shown. A newly shown one is spawned; hidden ones are dropped.
+template <int N, typename F>
+void setCount(Bug (&a)[N], int n, F spawn) {
+    for (int k = 0; k < N; k++) {
+        if (k < n && !a[k].on) { a[k] = Bug{}; a[k].on = true; spawn(a[k], k); }
+        else if (k >= n) a[k].on = false;
+    }
 }
 
-void isopod(int x, int y, int kind, bool right) {
-    uint16_t base, seg;
-    switch (kind % 4) {
-        case 0: base = rgb(128, 132, 144); seg = rgb(84, 88, 100); break;              // common gray
-        case 1: base = rgb(232, 148, 60);  seg = rgb(160, 90, 30); break;              // orange
-        case 2: base = rgb(236, 236, 230); seg = rgb(60, 60, 64); break;              // dalmatian
-        default: base = rgb(110, 130, 150); seg = rgb(210, 214, 220); break;           // zebra
+// --- isopods: wander the surface (soil, wood, stone), pause and feel about with
+// their antennae, busier at night. A jolt rolls the pill bugs into balls.
+void isoStep(Bug& b, int k, float dt, float act, bool startle) {
+    if (startle) {
+        if (k % 4 != 3) { b.st = ISO_ROLL; b.timer = rr(3.5f, 6.0f); }
+        else { b.st = ISO_WALK; b.timer = rr(1.0f, 2.0f); b.vx = 2.5f; }  // the zebra one bolts instead
     }
-    C->fillEllipse(x, y, 3, 2, base);
-    for (int i = -1; i <= 1; i++) C->drawFastVLine(x + i * 2, y - 1, 3, seg);
-    C->drawPixel(x + (right ? 4 : -4), y - 1, rgb(60, 60, 60));
-    C->drawPixel(x + (right ? 4 : -4), y + 1, rgb(60, 60, 60));
-    C->drawPixel(x - 2, y + 2, rgb(50, 50, 50)); C->drawPixel(x + 2, y + 2, rgb(50, 50, 50));
+    switch (b.st) {
+        case ISO_WALK: {
+            float sp = (3.0f + (k % 3) * 0.9f) * act * (1.0f + b.vx);
+            b.vx = fmaxf(0.0f, b.vx - dt * 1.5f);
+            b.x += b.dir * sp * dt;
+            b.phase += dt * sp * 0.9f;
+            if (b.x < kXL) { b.x = kXL; b.dir = 1; }
+            if (b.x > kXR) { b.x = kXR; b.dir = -1; }
+            if ((b.timer -= dt) <= 0) { b.st = ISO_PAUSE; b.timer = rr(0.6f, 2.8f); }
+            break;
+        }
+        case ISO_PAUSE:
+            b.phase += dt * 2.5f;
+            if ((b.timer -= dt) <= 0) {
+                b.st = ISO_WALK;
+                b.timer = rr(2.0f, 7.0f);
+                if (rnd() < 0.35f) b.dir = -b.dir;
+            }
+            break;
+        case ISO_ROLL:
+            if ((b.timer -= dt) <= 0) { b.st = ISO_PAUSE; b.timer = rr(0.8f, 1.6f); }
+            break;
+    }
+    b.y = approach(b.y, ground(b.x) - 4, 10.0f, dt);
+}
+
+void isoDraw(const Bug& b, int kind) {
+    uint16_t base, seg, lite;
+    switch (kind % 4) {
+        case 0: base = rgb(136, 140, 152); seg = rgb(78, 82, 94); lite = rgb(184, 188, 198); break;    // common grey
+        case 1: base = rgb(236, 150, 58); seg = rgb(150, 82, 26); lite = rgb(255, 196, 120); break;    // orange
+        case 2: base = rgb(238, 238, 232); seg = rgb(54, 54, 60); lite = rgb(255, 255, 252); break;    // dalmatian
+        default: base = rgb(108, 128, 150); seg = rgb(214, 218, 224); lite = rgb(160, 178, 196); break;  // zebra
+    }
+    int x = ir(b.x), y = ir(b.y), d = b.dir;
+    uint16_t ink = rgb(34, 28, 24);
+    if (b.st == ISO_ROLL) {  // conglobated: a little banded ball
+        C->fillCircle(x, y + 1, 2, base);
+        C->drawPixel(x - 1, y, lite);
+        C->drawFastVLine(x, y, 3, seg);
+        C->drawPixel(x + 1, y + 2, seg);
+        C->drawFastHLine(x - 1, y + 3, 3, ink);
+        return;
+    }
+    // legs: a ripple that runs along the body while walking
+    int step = b.st == ISO_WALK ? ((int)(b.phase * 3.0f) & 1) : 0;
+    for (int i = -3; i <= 3; i += 2) C->drawPixel(x + i + step, y + 3, ink);
+    C->fillEllipse(x, y, 4, 2, base);
+    C->drawFastHLine(x - 2, y - 2, 5, lite);
+    for (int i = -2; i <= 2; i += 2) C->drawFastVLine(x + i - d, y - 1, 3, seg);
+    C->drawPixel(x - d * 5, y + 1, seg);  // uropods
+    // head and antennae; the antennae sweep while it pauses and probes
+    int a = (int)(sinf(b.phase * 2.2f) * 1.6f);
+    C->drawPixel(x + d * 4, y, ink);
+    C->drawLine(x + d * 4, y - 1, x + d * 7, y - 2 + a, ink);
+    C->drawLine(x + d * 4, y, x + d * 7, y + 1 - a / 2, ink);
+}
+
+// --- springtails: sit and graze, then flick the furcula and spring off in an
+// arc many body lengths long. A few walk on the glass. A jolt makes them all jump.
+void sprSpawn(Bug& b, int k) {
+    b.dir = rnd() < 0.5f ? -1 : 1;
+    b.timer = rr(0.3f, 4.0f);
+    if (k % 4 == 0) {
+        b.st = ST_GLASS;
+        b.x = (k & 4) ? kJarL + 2 : kJarR - 2;
+        b.y = rr(kSoilTop - 40, kSoilTop - 8);
+    } else {
+        b.st = ST_SIT;
+        b.x = rr(kXL, kXR);
+        b.y = ground(b.x) - 1;
+    }
+}
+
+void sprHop(Bug& b, float power) {
+    if (rnd() < 0.4f) b.dir = -b.dir;
+    b.vx = b.dir * rr(10.0f, 30.0f) * power;
+    b.vy = -rr(28.0f, 46.0f) * power;
+    b.st = ST_HOP;
+}
+
+void sprStep(Bug& b, float dt, bool startle) {
+    switch (b.st) {
+        case ST_SIT:
+            b.phase += dt;
+            if (fmodf(b.phase, 2.4f) < 0.9f) {  // amble a little between hops
+                b.x += b.dir * 2.0f * dt;
+                if (b.x < kXL || b.x > kXR) b.dir = -b.dir;
+            }
+            b.y = ground(b.x) - 1;
+            if (startle) sprHop(b, 1.3f);
+            else if ((b.timer -= dt) <= 0) sprHop(b, 1.0f);
+            break;
+        case ST_HOP:
+            b.x += b.vx * dt;
+            b.y += b.vy * dt;
+            b.vy += kG * dt;
+            if (b.x < kXL) { b.x = kXL; b.vx = -b.vx; b.dir = 1; }
+            if (b.x > kXR) { b.x = kXR; b.vx = -b.vx; b.dir = -1; }
+            if (b.vy > 0 && b.y >= ground(b.x) - 1) { b.y = ground(b.x) - 1; b.st = ST_SIT; b.timer = rr(1.0f, 6.0f); }
+            break;
+        case ST_GLASS:
+            b.phase += dt;
+            if (fmodf(b.phase, 3.0f) < 1.8f) b.y += b.dir * 3.0f * dt;
+            if (b.y < kSoilTop - 46) b.dir = 1;
+            if (b.y > kSoilTop - 6) b.dir = -1;
+            if (startle) {  // knocked off the glass
+                b.vx = (b.x < 120 ? 1 : -1) * rr(6.0f, 14.0f);
+                b.vy = 0;
+                b.dir = b.vx > 0 ? 1 : -1;
+                b.st = ST_HOP;
+            }
+            break;
+    }
+}
+
+void sprDraw(const Bug& b) {
+    int x = ir(b.x), y = ir(b.y);
+    uint16_t white = rgb(252, 252, 255), ink = rgb(40, 34, 30);
+    if (b.st == ST_GLASS) {
+        C->drawFastVLine(x, y, 2, white);
+        C->drawPixel(x, y + (b.dir > 0 ? 2 : -1), ink);  // head
+        return;
+    }
+    if (b.st == ST_HOP) {
+        int gy = (int)ground(b.x);
+        if (gy - y > 2) C->drawFastHLine(x - 1, gy - 1, 2, rgb(44, 32, 24));  // shadow, so the height reads
+    } else {
+        C->drawFastHLine(x - 1, y + 1, 3, ink);  // dark underside: keeps the speck readable on leaves
+    }
+    C->drawFastHLine(x - 1, y, 3, white);
+    C->drawPixel(x + 2 * b.dir, y, ink);  // head
+}
+
+// --- fungus gnats: erratic, jinking flight low over the soil, then they land,
+// twitch about for a bit and take off again.
+void gnatSpawn(Bug& b, int) {
+    b.x = rr(kXL + 10, kXR - 10);
+    b.y = rr(kJarT + 22, kSoilTop - 20);
+    b.vx = rr(-20, 20);
+    b.vy = rr(-10, 10);
+    b.st = GN_FLY;
+    b.timer = rr(2.0f, 7.0f);
+    b.col = 0;
+}
+
+void gnatStep(Bug& b, float dt, bool startle) {
+    if (b.st == GN_FLY) {
+        float home = b.col ? ground(b.x) + 2 : kSoilTop - 26;  // hover low; dive when landing
+        b.vx += rr(-1, 1) * 260.0f * dt;
+        b.vy += (rr(-1, 1) * 260.0f + (home - b.y) * 3.0f) * dt;
+        float damp = 1.0f - fminf(1.0f, 1.6f * dt);
+        b.vx *= damp; b.vy *= damp;
+        float sp = sqrtf(b.vx * b.vx + b.vy * b.vy);
+        if (sp > 38.0f) { b.vx *= 38.0f / sp; b.vy *= 38.0f / sp; }
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        if (b.x < kXL) { b.x = kXL; b.vx = fabsf(b.vx); }
+        if (b.x > kXR) { b.x = kXR; b.vx = -fabsf(b.vx); }
+        if (b.y < kJarT + 16) { b.y = kJarT + 16; b.vy = fabsf(b.vy); }
+        b.dir = b.vx >= 0 ? 1 : -1;
+        if ((b.timer -= dt) <= 0) b.col = 1;
+        if (b.y >= ground(b.x) - 1) {
+            b.y = ground(b.x) - 1;
+            if (b.col) { b.st = GN_LAND; b.timer = rr(1.5f, 6.0f); }
+            else b.vy = -fabsf(b.vy);
+        }
+    } else {
+        if (rnd() < dt * 1.5f) { b.x += b.dir * rr(1.0f, 3.0f); if (rnd() < 0.3f) b.dir = -b.dir; }
+        b.x = clampX(b.x);
+        b.y = ground(b.x) - 1;
+        if ((b.timer -= dt) <= 0 || startle) { b.st = GN_FLY; b.vy = -30; b.vx = rr(-15, 15); b.timer = rr(3.0f, 9.0f); b.col = 0; }
+    }
+}
+
+void gnatDraw(const Bug& b, int frame) {
+    int x = ir(b.x), y = ir(b.y), d = b.dir;
+    uint16_t body = rgb(22, 22, 26), wing = rgb(206, 216, 226);
+    C->drawPixel(x, y, body);
+    C->drawPixel(x - d, y, body);
+    if (b.st == GN_FLY) {  // wings beating: alternate between up and spread
+        if (frame & 1) { C->drawPixel(x - d, y - 1, wing); C->drawPixel(x, y - 2, wing); }
+        else { C->drawPixel(x - 2 * d, y - 1, wing); C->drawPixel(x + d, y - 1, wing); }
+    } else {
+        C->drawPixel(x - 2 * d, y - 1, wing);  // folded over the back
+        C->drawPixel(x + d, y - 1, body);      // long antenna
+    }
+}
+
+// --- ladybugs: climb up and down plant stems hunting aphids, pause, and now
+// and then open their wing cases and fly to another plant.
+int ladyCols[kCols], nLadyCols = 0;
+
+void ladyTarget(int col, const World& w, float& tx, float& ty, float u) {
+    int h = plantHeight(w, col);
+    tx = stemX(col) + 2;
+    ty = kSoilTop - 3 - u * (h * 0.72f - 3);
+}
+
+void ladyStep(Bug& b, int k, const World& w, float dt) {
+    if (nLadyCols == 0 && b.st != LB_GROUND) { b.st = LB_GROUND; b.timer = rr(2, 5); }
+    switch (b.st) {
+        case LB_CLIMB:
+        case LB_PAUSE: {
+            int h = plantHeight(w, b.col);
+            float top = h * 0.72f - 3;
+            if (top < 4) { b.st = LB_PAUSE; b.timer = 0; }
+            if (b.st == LB_CLIMB) {
+                b.phase -= b.dir * 5.0f * dt;  // phase = height above the soil, px
+                if (b.phase >= top) { b.phase = top; b.st = LB_PAUSE; b.timer = rr(1.0f, 4.0f); }
+                if (b.phase <= 0) { b.phase = 0; b.st = LB_PAUSE; b.timer = rr(1.0f, 3.0f); }
+            } else if ((b.timer -= dt) <= 0) {
+                if (nLadyCols > 1 && (rnd() < 0.35f || top < 4)) {  // take off
+                    b.vx = b.x; b.vy = b.y;
+                    int c = ladyCols[(int)(rnd() * nLadyCols) % nLadyCols];
+                    if (c == b.col) c = ladyCols[(k + 1 + (int)(rnd() * 7)) % nLadyCols];
+                    b.col = c;
+                    b.timer = 0;
+                    b.st = LB_FLY;
+                    break;
+                }
+                b.dir = b.phase > top * 0.5f ? 1 : -1;
+                b.st = LB_CLIMB;
+            }
+            b.phase = fminf(b.phase, fmaxf(top, 0.0f));
+            b.x = stemX(b.col) + 2 + (int)(sinf(b.phase * 0.5f + k) * 1.5f);
+            b.y = kSoilTop - 3 - b.phase;
+            break;
+        }
+        case LB_FLY: {
+            float tx, ty;
+            float u0 = 0.3f + 0.5f * frand(k * 13 + b.col);
+            ladyTarget(b.col, w, tx, ty, u0);
+            float dist = fabsf(tx - b.vx) + fabsf(ty - b.vy);
+            b.timer += dt / fmaxf(0.8f, dist / 34.0f);
+            float u = fminf(1.0f, b.timer);
+            b.x = b.vx + (tx - b.vx) * u;
+            b.y = b.vy + (ty - b.vy) * u - sinf(u * 3.14159f) * (10 + dist * 0.15f);
+            b.dir = tx >= b.vx ? 1 : -1;
+            if (u >= 1.0f) {
+                b.phase = kSoilTop - 3 - ty;
+                b.st = LB_PAUSE;
+                b.timer = rr(0.5f, 2.0f);
+                b.dir = -1;
+            }
+            break;
+        }
+        case LB_GROUND:
+            if (rnd() < dt * 0.5f) b.dir = -b.dir;
+            b.x = clampX(b.x + (b.dir > 0 ? 1 : -1) * 4.0f * dt);
+            b.y = approach(b.y, ground(b.x) - 3, 10.0f, dt);
+            if (nLadyCols > 0 && (b.timer -= dt) <= 0) {
+                b.col = ladyCols[(int)(rnd() * nLadyCols) % nLadyCols];
+                b.vx = b.x; b.vy = b.y; b.timer = 0; b.st = LB_FLY;
+            }
+            break;
+    }
+}
+
+void ladySpawn(Bug& b, int k, const World& w) {
+    b.st = LB_GROUND;
+    b.x = rr(kXL, kXR);
+    b.y = ground(b.x) - 3;
+    b.dir = 1;
+    b.timer = rr(0.5f, 3.0f);
+    if (nLadyCols > 0) {
+        b.col = ladyCols[(k * 5 + (int)(rnd() * nLadyCols)) % nLadyCols];
+        b.phase = rr(0, plantHeight(w, b.col) * 0.6f);
+        b.st = LB_CLIMB;
+        b.dir = rnd() < 0.5f ? -1 : 1;
+    }
+}
+
+void ladyDraw(const Bug& b, int frame) {
+    int x = ir(b.x), y = ir(b.y);
+    uint16_t red = rgb(232, 44, 36), ink = rgb(16, 16, 18);
+    if (b.st == LB_FLY) {  // hind wings buzzing out from under the open elytra
+        uint16_t wing = rgb(220, 228, 236);
+        int wy = (frame & 1) ? y - 2 : y;
+        C->drawLine(x - 2, y - 1, x - 4, wy, wing);
+        C->drawLine(x + 2, y - 1, x + 4, wy, wing);
+    }
+    C->fillCircle(x, y, 2, red);
+    if (b.st == LB_GROUND || b.st == LB_FLY) {  // side view
+        int d = b.dir;
+        C->drawFastVLine(x + d * 2, y - 1, 3, ink);  // head
+        C->drawPixel(x + d * 2, y - 1, rgb(240, 240, 236));
+        C->drawPixel(x - d, y, ink);
+        C->drawPixel(x + d, y + 1, ink);
+    } else {  // top view, head leading the way up or down the stem
+        int s = b.dir < 0 ? 1 : -1;  // +1 when the head is at the top
+        C->drawFastHLine(x - 1, y - 2 * s, 3, ink);
+        C->drawPixel(x, y - s, ink);  // seam
+        C->drawPixel(x, y, ink);
+        C->drawPixel(x - 1, y + s, ink);  // spots
+        C->drawPixel(x + 1, y + s, ink);
+        C->drawPixel(x - 1, y - s, rgb(255, 150, 140));  // shine
+        return;
+    }
+    C->drawPixel(x - 1, y - 1, rgb(255, 150, 140));  // shine
+}
+
+// --- jumping spider: looks around, picks out a landed gnat or a springtail,
+// creeps toward it in stop-go bursts, crouches, and pounces.
+bool preyPos(int id, float& px, float& py) {
+    if (id >= 0 && id < kMaxGnat) {
+        const Bug& g = gnat[id];
+        if (!g.on || g.st != GN_LAND) return false;
+        px = g.x; py = g.y; return true;
+    }
+    if (id >= 16 && id < 16 + kMaxSpring) {
+        const Bug& s = spr[id - 16];
+        if (!s.on || s.st != ST_SIT) return false;
+        px = s.x; py = s.y; return true;
+    }
+    return false;
+}
+
+int findPrey(const Bug& b) {
+    int best = -1;
+    float bd = 70.0f;
+    for (int i = 0; i < kMaxGnat; i++) {
+        float px, py;
+        if (preyPos(i, px, py) && fabsf(py - b.y) < 18 && fabsf(px - b.x) < bd) { bd = fabsf(px - b.x); best = i; }
+    }
+    for (int i = 0; i < kMaxSpring; i++) {
+        float px, py;
+        if (preyPos(16 + i, px, py) && fabsf(py - b.y) < 18 && fabsf(px - b.x) + 15 < bd) { bd = fabsf(px - b.x) + 15; best = 16 + i; }
+    }
+    return best;
+}
+
+void spiStep(Bug& b, float dt, float act) {
+    float px = 0, py = 0;
+    bool seen = preyPos(b.col, px, py);
+    switch (b.st) {
+        case JS_SIT:
+            if (rnd() < dt * 0.5f) b.dir = -b.dir;  // turning to look about
+            if ((b.timer -= dt) <= 0) {
+                b.col = findPrey(b);
+                if (b.col >= 0) { b.st = JS_STALK; b.phase = 0; }
+                else if (rnd() < 0.5f) { b.col = -1; b.vx = (float)clampX(b.x + rr(-35, 35)); b.st = JS_STALK; b.phase = 0; }
+                else b.timer = rr(1.0f, 3.0f);
+            }
+            break;
+        case JS_STALK: {
+            float tx = b.col >= 0 ? px : b.vx;
+            if (b.col >= 0 && !seen) { b.st = JS_SIT; b.timer = rr(0.5f, 1.5f); break; }
+            b.dir = tx >= b.x ? 1 : -1;
+            b.phase += dt;
+            bool moving = fmodf(b.phase, 0.9f) < 0.4f;  // stop-go
+            if (moving) b.x += b.dir * (b.col >= 0 ? 16.0f : 22.0f) * act * dt;
+            b.x = clampX(b.x);
+            if (b.col >= 0 && fabsf(tx - b.x) < 16) { b.st = JS_CROUCH; b.timer = 0.45f; }
+            else if (b.col < 0 && fabsf(tx - b.x) < 2) { b.st = JS_SIT; b.timer = rr(1.0f, 4.0f); }
+            break;
+        }
+        case JS_CROUCH:
+            if (seen) b.dir = px >= b.x ? 1 : -1;
+            if ((b.timer -= dt) <= 0) {
+                if (!seen) { b.st = JS_SIT; b.timer = 1.0f; break; }
+                const float T = 0.42f;
+                b.vx = (px - b.x) / T;
+                b.vy = (py - 2 - b.y) / T - 0.5f * kG * T;
+                b.st = JS_JUMP;
+            }
+            break;
+        case JS_JUMP:
+            b.x += b.vx * dt;
+            b.y += b.vy * dt;
+            b.vy += kG * dt;
+            if (b.x < kXL || b.x > kXR) { b.x = clampX(b.x); b.vx = 0; }
+            if (b.vy > 0 && b.y >= ground(b.x) - 3) {
+                b.y = ground(b.x) - 3;
+                if (seen && fabsf(px - b.x) < 5) {  // caught it; it re-enters elsewhere
+                    if (b.col < 16) gnat[b.col].on = false;
+                    else spr[b.col - 16].on = false;
+                    b.st = JS_EAT;
+                    b.timer = rr(5.0f, 9.0f);
+                } else { b.st = JS_SIT; b.timer = rr(0.5f, 1.5f); }
+                b.col = -1;
+            }
+            return;
+        case JS_EAT:
+            if ((b.timer -= dt) <= 0) { b.st = JS_SIT; b.timer = rr(4.0f, 8.0f); }
+            break;
+    }
+    b.y = approach(b.y, ground(b.x) - 3 + (b.st == JS_CROUCH ? 1 : 0), 12.0f, dt);
+}
+
+void spiDraw(const Bug& b) {
+    int x = ir(b.x), y = ir(b.y), d = b.dir;
+    uint16_t body = rgb(30, 28, 32), leg = rgb(70, 60, 54), white = rgb(246, 246, 240);
+    bool walking = b.st == JS_STALK && fmodf(b.phase, 0.9f) < 0.4f;
+    int s = walking ? ((int)(b.phase * 14.0f) & 1) : 0;
+    bool air = b.st == JS_JUMP;
+    // legs: three pairs splay down to the surface (tucked in mid-air)
+    for (int i = 0; i < 3; i++) {
+        int lx = x - d * (3 - i * 2), off = ((i + s) & 1) ? 1 : -1;
+        if (air) C->drawLine(lx, y + 1, lx - d, y + 2, leg);
+        else C->drawLine(lx, y + 1, lx + off, y + 3, leg);
+    }
+    // front legs: raised while stalking and crouching, stretched forward when it leaps
+    if (air) C->drawLine(x + d * 2, y, x + d * 5, y - 1, leg);
+    else if (b.st == JS_STALK || b.st == JS_CROUCH) C->drawLine(x + d * 2, y, x + d * 4, y - 2, leg);
+    else C->drawLine(x + d * 2, y, x + d * 4, y + 3, leg);
+    C->fillEllipse(x - d * 3, y, 3, 2, body);  // abdomen
+    C->drawPixel(x - d * 3, y - 1, white);     // the white spot
+    C->drawPixel(x - d * 4, y, white);
+    C->fillCircle(x + d, y - 1, 2, body);      // cephalothorax
+    C->drawPixel(x + d * 3, y - 1, rgb(110, 110, 120));  // big front eye...
+    C->drawPixel(x + d * 2, y - 2, white);                // ...and its glint
+    C->drawPixel(x + d * 3, y, rgb(60, 196, 160));        // iridescent chelicerae
+    if (b.st == JS_EAT) C->drawPixel(x + d * 4, y, rgb(200, 206, 214));  // the catch
 }
 
 void mushroom(int x, int y, int kind) {
@@ -332,92 +859,29 @@ void mushroom(int x, int y, int kind) {
     else { C->fillEllipse(x, y - 5, 2, 1, rgb(228, 220, 196)); C->drawPixel(x, y - 6, rgb(245, 240, 225)); }
 }
 
-void drawCreatures(const World& w, float dayFrac, float t) {
-    (void)dayFrac;
-    // leaf litter is underfoot for everything below
-    drawLitter(w);
+// Shown count for a species: round(density * per), capped, and at least one
+// whenever the population is present at all.
+int shown(float density, float per, int cap) {
+    if (density < 0.012f) return 0;
+    int n = (int)roundf(density * per);
+    return n < 1 ? 1 : (n > cap ? cap : n);
+}
 
-    // springtails: white specks on the soil, hopping; a few on the glass
-    int nsp = (int)roundf(w.spring * 44);
-    if (nsp > 14) nsp = 14;
-    for (int k = 0; k < nsp; k++) {
-        bool glass = (k % 4) == 0;
-        float ph = t * 0.9f + k * 1.7f;
-        float hopPhase = fmodf(t * 0.5f + k * 0.37f, 3.0f);
-        float hop = hopPhase < 0.35f ? sinf(hopPhase / 0.35f * 3.14159f) * 3.0f : 0.0f;
-        if (glass) {
-            int gx = (k & 4) ? kJarL + 2 : kJarR - 2;
-            int gy = kSoilTop - 4 - (int)(fmodf(t * 0.6f + k * 11.0f, 30.0f));
-            springtail(gx, gy, 0);
-        } else {
-            int x = kJarL + 6 + (int)(hash32(k + 50) % 205 + sinf(ph) * 5 + t * 0.4f * (1 + k % 3)) % 205;
-            springtail(x, surfaceY(x) - 1, hop);
-        }
-    }
-    // isopods on the soil, litter and wood
-    int niso = (int)roundf(w.worm * 10);
-    if (niso > 5) niso = 5;
-    for (int k = 0; k < niso; k++) {
-        float sp = 0.10f + k * 0.03f;
-        int x = kJarL + 8 + (int)fmodf(hash32(k + 90) % 205 + t * sp * 10.0f, 205.0f);
-        isopod(x, surfaceY(x) - 2, k, true);
-    }
-    // gnat larvae: pale wisps in the top of the soil, against the glass
-    int nl = (int)roundf(w.cat * 25);
-    if (nl > 5) nl = 5;
-    for (int k = 0; k < nl; k++) {
-        int x = kJarL + 12 + hash32(k + 700) % 200, y = kSoilTop + 3 + (int)(hash32(k + 720) % 9);
-        int wig = (int)roundf(sinf(t * 2 + k) * 1.0f);
-        C->drawFastHLine(x, y + wig, 4, rgb(240, 240, 224));
-        C->drawPixel(x + 4, y + wig, rgb(30, 30, 30));
-    }
-    // aphids: tiny dots on leaves of the taller plants (they like ferns and pilea)
-    int na = (int)roundf(w.aphid * 34);
-    if (na > 10) na = 10;
-    for (int k = 0; k < na; k++) {
-        int c = hash32(k * 31 + 7) % kCols;
-        int h = plantHeight(w, c);
-        if (h < 10) continue;
-        int y = 4 + (int)(hash32(k) % (h - 3));
-        int x = stemX(c) + (int)(hash32(k + 3) % 7) - 3;
-        C->drawPixel(x, kSoilTop - y, (k & 1) ? rgb(150, 210, 90) : rgb(226, 150, 150));
-        C->drawPixel(x + 1, kSoilTop - y, (k & 1) ? rgb(110, 170, 70) : rgb(190, 110, 110));
-    }
-    // ladybugs
-    int nlb = (int)roundf(w.lady * 20);
-    if (nlb > 3) nlb = 3;
-    for (int k = 0; k < nlb; k++) {
-        int c = hash32(k * 71 + 11) % kCols, h = plantHeight(w, c);
-        if (h < 12) continue;
-        int y = 6 + (int)(hash32(k + 5) % (h - 6));
-        int x = stemX(c) + 3;
-        C->fillCircle(x, kSoilTop - y, 1, rgb(226, 60, 50));
-        C->drawFastHLine(x - 1, kSoilTop - y, 3, rgb(20, 20, 20));
-    }
-    // adult fungus gnats: tiny erratic flyers
-    int ng = (int)roundf(w.butter * 30);
-    if (ng > 6) ng = 6;
-    for (int k = 0; k < ng; k++) {
-        float cx = kJarL + 30 + hash32(k + 2000) % 160, cy = 40 + hash32(k + 2100) % 40;
-        int x = (int)(cx + sinf(t * 1.3f + k * 2.0f) * 24 + sinf(t * 4.7f + k) * 3);
-        int y = (int)(cy + cosf(t * 1.1f + k * 1.4f) * 16 + cosf(t * 5.3f + k) * 3);
-        C->drawPixel(x, y, rgb(20, 20, 24));
-        C->drawPixel(x + 1, y, rgb(20, 20, 24));
-        C->drawPixel(x, y - 1, rgb(200, 210, 220));
-    }
-    // jumping spider on the wood or glass
-    int nsp2 = (int)roundf(w.spider * 12);
-    if (nsp2 > 2) nsp2 = 2;
-    for (int k = 0; k < nsp2; k++) {
-        int x = k == 0 ? kWoodX0 + 24 + (int)(sinf(t * 0.2f) * 6) : kJarR - 3;
-        int y = k == 0 ? woodTop(x) - 2 : kSoilTop - 26 + (int)(sinf(t * 0.3f) * 8);
-        if (fmodf(t * 0.4f + k, 5.0f) < 0.3f) y -= 3;  // a jump
-        uint16_t sc = rgb(96, 70, 52);
-        C->fillCircle(x, y, 2, sc);
-        C->drawPixel(x + 2, y - 1, rgb(30, 30, 30));
-        for (int j = 0; j < 3; j++) { C->drawLine(x, y, x - 3, y + j, sc); C->drawLine(x, y, x + 3, y + j, sc); }
-        C->drawPixel(x - 1, y - 1, rgb(230, 230, 220));
-    }
+void drawCreatures(const World& w, float day, float t, float jolt) {
+    float dt = gLastT < 0 ? 0.05f : t - gLastT;
+    gLastT = t;
+    gDt = dt;
+    if (dt < 0 || dt > 0.12f) dt = dt < 0 ? 0 : 0.12f;  // a long gap pauses the bugs instead of teleporting them
+    gR ^= (uint32_t)(t * 1000.0f);
+    if (gR == 0) gR = 1;
+    // a jolt (the IMU felt the board knocked) startles everything once
+    bool startle = jolt > 0.3f && gJoltHold <= 0;
+    if (startle) gJoltHold = 2.0f;
+    gJoltHold -= dt;
+    int frame = (int)(t * 20.0f);
+
+    drawLitter(w);  // underfoot for everything below
+
     // small mushrooms
     int nm = (int)roundf(w.fungus * 10);
     if (nm > 4) nm = 4;
@@ -425,6 +889,77 @@ void drawCreatures(const World& w, float dayFrac, float t) {
         int x = kJarL + 30 + (int)(hash32(k + 800) % 180);
         if (surfaceY(x) == kSoilTop) mushroom(x, kSoilTop, k);
     }
+    // gnat larvae: translucent wisps in the top of the soil, inching along the glass
+    int nl = (int)roundf(w.cat * 25);
+    if (nl > 5) nl = 5;
+    for (int k = 0; k < nl; k++) {
+        int x = kJarL + 14 + hash32(k + 700) % 196 + (int)(sinf(t * 0.12f + k * 2.1f) * 8);
+        int y = kSoilTop + 3 + (int)(hash32(k + 720) % 9);
+        int len = 3 + (int)(sinf(t * 2.4f + k) * 1.5f + 1.0f);  // stretch and contract
+        int wig = (int)roundf(sinf(t * 1.7f + k));
+        C->drawFastHLine(x - len, y + wig, len + 1, rgb(236, 236, 220));
+        C->drawPixel(x + 1, y + wig, rgb(24, 24, 24));
+    }
+    // aphids: little colonies on the taller plants; they shuffle now and then
+    int na = (int)roundf(w.aphid * 34);
+    if (na > 10) na = 10;
+    for (int k = 0; k < na; k++) {
+        int c = hash32(k * 31 + 7) % kCols;
+        int h = plantHeight(w, c);
+        if (h < 10) continue;
+        int y = 4 + (int)(hash32(k) % (h - 3));
+        int x = stemX(c) + (int)(hash32(k + 3) % 7) - 3 + (int)(hash32(k * 7 + (int)(t / 3.0f + k * 0.37f)) % 3) - 1;
+        uint16_t a = (k & 1) ? rgb(156, 214, 92) : rgb(230, 156, 156), b = (k & 1) ? rgb(100, 160, 60) : rgb(186, 104, 104);
+        C->drawPixel(x, kSoilTop - y, a);
+        C->drawPixel(x + 1, kSoilTop - y, b);
+        C->drawPixel(x, kSoilTop - y + 1, b);
+    }
+
+    // plants a ladybug can climb: an upright stem, tall enough
+    nLadyCols = 0;
+    for (int c = 0; c < kCols; c++) {
+        int kd = kKind[c];
+        if (kd == K_FIG || kd == K_MAT || kd == K_MOUND || kd == K_BABY) continue;
+        if (plantHeight(w, c) >= 14) ladyCols[nLadyCols++] = c;
+    }
+
+    float act = 0.8f + 0.7f * (1.0f - day);  // isopods are nocturnal
+    setCount(iso, shown(w.worm, 10, kMaxIso), [](Bug& b, int) {
+        b.x = rr(kXL, kXR); b.y = ground(b.x) - 4; b.dir = rnd() < 0.5f ? -1 : 1; b.st = ISO_WALK; b.timer = rr(1, 6);
+    });
+    setCount(spr, shown(w.spring, 44, kMaxSpring), sprSpawn);
+    setCount(gnat, shown(w.butter, 30, kMaxGnat), gnatSpawn);
+    setCount(lady, shown(w.lady, 20, kMaxLady), [&w](Bug& b, int k) { ladySpawn(b, k, w); });
+    setCount(spi, w.spider < 0.012f ? 0 : (w.spider > 0.12f ? 2 : 1), [](Bug& b, int k) {
+        b.x = k == 0 ? kWoodX0 + 24 : rr(kXL + 100, kXR); b.y = ground(b.x) - 3; b.dir = k ? -1 : 1;
+        b.st = JS_SIT; b.timer = rr(1, 3); b.col = -1;
+    });
+
+    for (int k = 0; k < kMaxIso; k++) if (iso[k].on) { isoStep(iso[k], k, dt, act, startle); isoDraw(iso[k], k); }
+    for (int k = 0; k < kMaxSpring; k++) if (spr[k].on) { sprStep(spr[k], dt, startle); sprDraw(spr[k]); }
+    for (int k = 0; k < kMaxSpider; k++) if (spi[k].on) { spiStep(spi[k], dt, 0.7f + 0.4f * day); spiDraw(spi[k]); }
+    for (int k = 0; k < kMaxLady; k++) if (lady[k].on) { ladyStep(lady[k], k, w, dt); ladyDraw(lady[k], frame + k); }
+    for (int k = 0; k < kMaxGnat; k++) if (gnat[k].on) { gnatStep(gnat[k], dt, startle); gnatDraw(gnat[k], frame + k); }
+}
+
+// A condensation drop now and then runs down the front glass when it is humid.
+float gDropX = -1, gDropY = 0, gDropV = 0, gDropY0 = 0;
+void drawDrop(const World& w, float dt) {
+    if (gDropX < 0) {
+        if (w.hum > 0.8f && rnd() < dt * (w.hum - 0.75f) * 0.4f) {
+            gDropX = rr(kJarL + 6, kJarR - 6);
+            gDropY = gDropY0 = rr(kJarT + 6, kJarT + 50);
+            gDropV = 0;
+        }
+        return;
+    }
+    gDropV = fminf(gDropV + 30.0f * dt, 22.0f);
+    gDropY += gDropV * dt;
+    int x = ir(gDropX), y = ir(gDropY);
+    for (int yy = (int)gDropY0; yy < y - 1; yy += 2) C->drawPixel(x, yy, raw(196, 216, 226));  // its wet trail
+    C->drawFastVLine(x, y - 1, 2, raw(236, 246, 252));
+    C->drawPixel(x, y + 1, raw(150, 176, 190));
+    if (gDropY > kSoilTop - 2) gDropX = -1;
 }
 
 }  // namespace
@@ -433,7 +968,7 @@ int plantHeight(const World& w, int col) {
     return (int)(w.p[col] * 100.0f * kScale[kKind[col]]);
 }
 
-void draw(M5Canvas& cv, const World& w, float dayFrac, float t, float wind) {
+void draw(M5Canvas& cv, const World& w, float dayFrac, float t, float wind, float jolt) {
     C = &cv;
     float day = clamp01((light(dayFrac) - 0.05f) / 0.4f);
     float lit = fmaxf(day, w.lamp);
@@ -446,7 +981,7 @@ void draw(M5Canvas& cv, const World& w, float dayFrac, float t, float wind) {
     for (int i = 0; i < kCols; i++) plant(i, w, t, wind);
     drawWood(w);
     drawStone();
-    drawCreatures(w, dayFrac, t);
+    drawCreatures(w, day, t, jolt);
 
     cv.clearClipRect();
 
@@ -460,6 +995,7 @@ void draw(M5Canvas& cv, const World& w, float dayFrac, float t, float wind) {
     cv.drawFastVLine(kJarL + 12, kJarT + 8, 26, raw(200, 225, 232));
     cv.drawFastVLine(kJarL + 14, kJarT + 14, 12, raw(160, 190, 200));
     cv.drawLine(kJarR - 30, kJarT + 2, kJarR - 44, kJarT + 26, raw(150, 180, 190));
+    drawDrop(w, gDt);
     int nd = (int)fmaxf(0.0f, (w.hum - 0.82f) * 90.0f);
     for (int i = 0; i < nd && i < 8; i++) {  // a few droplets, only on the glass edges
         int x = (i & 1) ? kJarR - 2 - (int)(hash32(i) % 3) : kJarL + 2 + (int)(hash32(i) % 3);

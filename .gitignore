@@ -2,3 +2,4 @@ harness
 .pio/
 .DS_Store
 dist/
+tools/preview/preview

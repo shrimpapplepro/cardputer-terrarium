@@ -3,7 +3,7 @@
 // working tree has uncommitted changes), so a running build can be told apart from a stored one.
 #pragma once
 
-#define TERRARIUM_VERSION "1.0.1"
+#define TERRARIUM_VERSION "1.0.3"
 
 #ifndef TERRARIUM_GIT_SHA
 #define TERRARIUM_GIT_SHA "nogit"

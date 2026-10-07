@@ -4,6 +4,11 @@
 #include <M5Cardputer.h>
 #include <Preferences.h>
 
+#include "soc/gpio_struct.h"
+#include "soc/io_mux_reg.h"
+#include "soc/usb_serial_jtag_struct.h"
+#include "esp_system.h"
+
 #include "help_text.h"
 #include "signals.h"
 #include "terrarium.h"
@@ -23,6 +28,7 @@ const char* kSpeedLabels[] = {"1x", "60x", "600x", "3600x"};
 uint8_t speedIdx = 0;
 
 uint32_t lastStepMs = 0, lastFrameMs = 0, lastSaveMs = 0, lastKeyMs = 0, resetArmedUntil = 0;
+uint32_t frameUs = 0, frameUsMax = 0;  // draw + push time, shown by the serial 's' status
 double simAccumDays = 0;
 float simFrac = 0.5f;
 bool displayOn = true;
@@ -173,10 +179,14 @@ void stepSim() {
 
 // ---- serial debug channel --------------------------------------------------
 
+void printUsbDiag();  // USB diagnostics, below
+
 void printStatus() {
     const Signals& s = sig::s;
     Serial.printf("terrarium v%s %s\n", TERRARIUM_VERSION, TERRARIUM_GIT_SHA);
+    printUsbDiag();
     Serial.printf("age=%.3f health=%.2f speed=%s page=%d frac=%.3f\n", world.age, health(world), kSpeedLabels[speedIdx], vs.page, simFrac);
+    Serial.printf("frame %lu us (max %lu)\n", (unsigned long)frameUs, (unsigned long)frameUsMax);
     Serial.printf("jar T=%.2f H=%.3f soil=%.3f nut=%.3f air=%.3f det=%.3f lamp=%.2f ev=%.2f/%.2f/%.2f\n", world.temp, world.hum,
                   world.soil, world.nut, world.air, world.det, world.lamp, world.evTemp, world.evHum, world.evLeft);
     Serial.printf("pop");
@@ -218,6 +228,102 @@ void dumpFramebuffer() {
     Serial.println("FBEND");
 }
 
+// ---- USB hot-plug -------------------------------------------------------------
+// Arduino 2.0.x HWCDC::begin() forces a re-enumeration by turning D- / D+ (GPIO19/20)
+// into open-drain GPIO outputs driven LOW, then turns the USB pads back on -- and never
+// turns those GPIO output drivers off. A host already attached at boot survives that,
+// but a cable plugged into a RUNNING board never comes up: the Mac sees the plug (CC)
+// and no USB device. Hand the pins back to the USB PHY. Plain register writes on
+// purpose: gpio_config()/pinMode() on 19/20 would switch the USB pads off again.
+void releaseUsbPins() {
+    GPIO.enable_w1tc = (1UL << USB_DM_GPIO_NUM) | (1UL << USB_DP_GPIO_NUM);
+    GPIO.pin[USB_DM_GPIO_NUM].pad_driver = 0;
+    GPIO.pin[USB_DP_GPIO_NUM].pad_driver = 0;
+    USB_SERIAL_JTAG.conf0.pad_pull_override = 0;
+    USB_SERIAL_JTAG.conf0.dp_pullup = 1;
+    USB_SERIAL_JTAG.conf0.usb_pad_enable = 1;
+}
+
+void printUsbState() {
+    Serial.printf("usb gpio19/20 oe=%lu/%lu out=%lu/%lu od=%u/%u iomux=%08lX/%08lX | conf0=%08lX pad=%u pullup=%u override=%u phy_sel=%u\n",
+                  (GPIO.enable >> 19) & 1, (GPIO.enable >> 20) & 1, (GPIO.out >> 19) & 1, (GPIO.out >> 20) & 1,
+                  (unsigned)GPIO.pin[19].pad_driver, (unsigned)GPIO.pin[20].pad_driver, (unsigned long)REG_READ(IO_MUX_GPIO19_REG),
+                  (unsigned long)REG_READ(IO_MUX_GPIO20_REG), (unsigned long)USB_SERIAL_JTAG.conf0.val,
+                  (unsigned)USB_SERIAL_JTAG.conf0.usb_pad_enable, (unsigned)USB_SERIAL_JTAG.conf0.dp_pullup,
+                  (unsigned)USB_SERIAL_JTAG.conf0.pad_pull_override, (unsigned)USB_SERIAL_JTAG.conf0.phy_sel);
+}
+
+// ---- USB diagnostics ------------------------------------------------------------
+// A cable plugged into a RUNNING board leaves the Mac with CC only (no USB device),
+// while a board that boots with the cable attached enumerates. Each boot keeps a small
+// record -- reset reason, host bus resets / connects, start-of-frame seen / lost, all
+// stamped with ms since boot -- saved to NVS whenever it changes, and the last three
+// boots are printed by `u` and `s`. A failed hot-plug can then be read back after the
+// next (slider) boot, which is a power-on reset that would wipe RTC memory.
+struct UsbRec {
+    uint32_t reset;
+    uint32_t busResets, connects, sofOn, sofOff;
+    uint32_t tBusReset, tConnect, tSofOn, tSofOff, tLast;
+};
+UsbRec usbRec[3];  // [0] this boot, [1] previous, [2] the one before
+Preferences diag;
+volatile uint32_t evBusResets = 0, evConnects = 0, evTBus = 0, evTConn = 0;
+bool sofSeen = false;
+uint32_t usbSavedSig = 0;
+
+void onCdcEvent(void*, esp_event_base_t, int32_t id, void*) {
+    uint32_t t = millis();
+    if (id == ARDUINO_HW_CDC_BUS_RESET_EVENT) { evBusResets++; evTBus = t; }
+    else if (id == ARDUINO_HW_CDC_CONNECTED_EVENT) { evConnects++; evTConn = t; }
+}
+
+const char* resetName(uint32_t r) {
+    static const char* n[] = {"unknown", "poweron", "ext", "sw", "panic", "int_wdt", "task_wdt", "wdt", "deepsleep", "brownout", "sdio"};
+    return r < 11 ? n[r] : "?";
+}
+
+void usbDiagBegin() {
+    diag.begin("usbdiag", false);
+    if (diag.getBytesLength("r0") == sizeof(UsbRec)) diag.getBytes("r0", &usbRec[1], sizeof(UsbRec));
+    if (diag.getBytesLength("r1") == sizeof(UsbRec)) diag.getBytes("r1", &usbRec[2], sizeof(UsbRec));
+    diag.putBytes("r1", &usbRec[1], sizeof(UsbRec));
+    diag.putBytes("r2", &usbRec[2], sizeof(UsbRec));
+    usbRec[0] = UsbRec{};
+    usbRec[0].reset = (uint32_t)esp_reset_reason();
+    diag.putBytes("r0", &usbRec[0], sizeof(UsbRec));
+    Serial.onEvent(ARDUINO_HW_CDC_BUS_RESET_EVENT, onCdcEvent);
+    Serial.onEvent(ARDUINO_HW_CDC_CONNECTED_EVENT, onCdcEvent);
+}
+
+void usbDiagPoll() {
+    UsbRec& r = usbRec[0];
+    uint32_t now = millis();
+    bool sof = HWCDC::isPlugged();  // start-of-frame packets arriving = a host is driving the bus
+    if (sof != sofSeen) {
+        sofSeen = sof;
+        if (sof) { r.sofOn++; r.tSofOn = now; } else { r.sofOff++; r.tSofOff = now; }
+    }
+    r.busResets = evBusResets; r.tBusReset = evTBus;
+    r.connects = evConnects; r.tConnect = evTConn;
+    uint32_t sig = r.busResets + r.connects * 7 + r.sofOn * 31 + r.sofOff * 127;
+    if (sig != usbSavedSig) {
+        usbSavedSig = sig;
+        r.tLast = now;
+        diag.putBytes("r0", &r, sizeof r);
+    }
+}
+
+void printUsbDiag() {
+    static const char* tag[3] = {"this boot", "prev boot", "boot -2 "};
+    Serial.printf("usb up=%lums sof=%d\n", (unsigned long)millis(), (int)sofSeen);
+    for (int i = 0; i < 3; i++) {
+        const UsbRec& r = usbRec[i];
+        Serial.printf("usb %s reset=%-9s busreset=%lu@%lu connect=%lu@%lu sof+=%lu@%lu sof-=%lu@%lu last@%lu\n", tag[i], resetName(r.reset),
+                      (unsigned long)r.busResets, (unsigned long)r.tBusReset, (unsigned long)r.connects, (unsigned long)r.tConnect,
+                      (unsigned long)r.sofOn, (unsigned long)r.tSofOn, (unsigned long)r.sofOff, (unsigned long)r.tSofOff, (unsigned long)r.tLast);
+    }
+}
+
 void handleSerialLine(String l) {
     l.trim();
     if (!l.length()) return;
@@ -226,7 +332,7 @@ void handleSerialLine(String l) {
     switch (c) {
         case 'h':
             Serial.println("s status | j journal | P screenshot | k<keys> inject keys | w scan now | f speed | v save\n"
-                           "x<days> fast-forward | z<seed> new jar | T<HHMM> set clock | o open/wake screen | G<n> show page n\n(keys: kh opens the on-device help)");
+                           "x<days> fast-forward | z<seed> new jar | T<HHMM> set clock | o open/wake screen | G<n> show page n | u usb pin state\n(keys: kh opens the on-device help)");
             break;
         case 's': printStatus(); break;
         case 'j': printJournal(); break;
@@ -250,6 +356,7 @@ void handleSerialLine(String l) {
             break;
         }
         case 'o': lastKeyMs = millis(); Serial.println("ok"); break;
+        case 'u': printUsbState(); printUsbDiag(); break;
         case 'G': vs.page = (view::Page)(arg.toInt() % view::kPages); Serial.printf("page=%d\n", vs.page); break;
         default: Serial.println("? try h"); break;
     }
@@ -269,6 +376,8 @@ void setup() {
     auto cfg = M5.config();
     M5Cardputer.begin(cfg, true);
     Serial.begin(115200);
+    releaseUsbPins();  // after the LAST Serial.begin(): see releaseUsbPins()
+    usbDiagBegin();
     M5Cardputer.Display.setRotation(1);
     M5Cardputer.Display.setBrightness(90);
     if (!view::begin(&M5Cardputer.Display)) Serial.println("[view] sprite alloc FAILED");
@@ -287,6 +396,7 @@ void setup() {
 }
 
 void loop() {
+    usbDiagPoll();
     pollKeys();
     pollSerial();
     sig::update();
@@ -306,12 +416,16 @@ void loop() {
         dimLevel = wantDim;
     }
 
-    if (displayOn && now - lastFrameMs >= 100) {
+    // 20 fps while the screen is bright so the bugs move smoothly; 10 fps once dimmed.
+    if (displayOn && now - lastFrameMs >= (dimLevel == 90 ? 50u : 100u)) {
         lastFrameMs = now;
         vs.dayFrac = speedIdx == 0 ? clockFrac() : simFrac;
         vs.speedLabel = kSpeedLabels[speedIdx];
+        uint32_t t0 = micros();
         view::draw(world, vs, sig::s);
         view::push();
+        frameUs = micros() - t0;
+        if (frameUs > frameUsMax) frameUsMax = frameUs;
     }
 
     if (now - lastSaveMs > 10UL * 60UL * 1000UL) saveWorld("autosave");
